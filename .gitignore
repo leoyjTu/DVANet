@@ -19,8 +19,8 @@ lightning_logs/
 wandb/
 
 # Checkpoints and pretrained weights
-All_in_One/dinov3/weights/
-Single_Composite/dinov3/weights/
+Multi_Noise_Denoising/dinov3/weights/
+Single_Composite_Degradation/dinov3/weights/
 *.ckpt
 *.pth
 *.pt
