@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+# IDE
+.vscode/
+.idea/
+
+# Results and experiments
+experiments/
+results/
+outputs/
+runs/
+logs/
+lightning_logs/
+wandb/
+
+# Checkpoints and pretrained weights
+All_in_One/dinov3/weights/
+Single_Composite/dinov3/weights/
+*.ckpt
+*.pth
+*.pt
+*.onnx
+*.safetensors
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

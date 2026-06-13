@@ -1,0 +1,114 @@
+name: DVANet-NightRain
+model_type: ImageRestorationModel
+scale: 1
+num_gpu: 4
+manual_seed: 42
+
+datasets:
+  train:
+    name: TrainSet
+    type: PairedImageDataset
+    dataroot_gt: ./datasets/NightRain/train/target
+    dataroot_lq: ./datasets/NightRain/train/input
+
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+
+    gt_size: 256
+    use_flip: true
+    use_rot: true
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 4
+    batch_size_per_gpu: 2
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  val:
+    name: ValSet
+    type: PairedImageDataset
+    dataroot_gt: ./datasets/NightRain/val/target
+    dataroot_lq: ./datasets/NightRain/val/input
+    io_backend:
+      type: disk
+
+network_g:
+  type: DVANet
+  inp_channels: 3
+  out_channels: 3
+  dim: 48
+  num_blocks: [4, 6, 6, 8]
+  num_refinement_blocks: 4
+  heads: [1, 2, 4, 8]
+  ffn_expansion_factor: 2.66
+  bias: False
+  LayerNorm_type: WithBias
+  degradation_dim: 512
+  drb_mid_channels: 64
+  local_token_grid: 2
+  num_degradation_tokens: 16
+  dino_extract_ids: [5,11,17,23]
+
+# path
+path:
+  pretrain_network_g:
+  strict_load_g:
+  resume_state:
+
+# training settings
+train:
+  optim_g:
+    type: AdamW
+    lr: !!float 2e-4
+    weight_decay: !!float 1e-4
+    betas: [0.9, 0.999]
+
+  scheduler:
+    type: TrueCosineAnnealingLR
+    T_max: 300000
+    eta_min: !!float 1e-7
+
+  total_iter: 300000
+  warmup_iter: 5000
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+
+  fft_loss_opt:
+    type: FFTLoss
+    loss_weight: 0.1
+    reduction: mean
+
+# validation settings
+val:
+  val_freq: !!float 5e3
+  save_img: false
+
+  metrics:
+    psnr:
+      type: calculate_psnr
+      crop_border: 0
+      test_y_channel: true
+    ssim:
+      type: calculate_ssim
+      crop_border: 0
+      test_y_channel: true
+
+# logging settings
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 5e3
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500

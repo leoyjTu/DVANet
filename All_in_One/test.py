@@ -1,0 +1,270 @@
+import os
+import numpy as np
+import argparse
+from tqdm import tqdm
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+import lightning.pytorch as pl
+
+from utils.dataset_utils import DenoiseTestDataset, DerainDehazeDataset
+from utils.val_utils import AverageMeter, compute_psnr_ssim
+from utils.image_io import save_image_tensor
+from net.model import DVANet
+from utils.schedulers import LinearWarmupCosineAnnealingLR
+
+
+class DVANetModel(pl.LightningModule):
+    def __init__(self):
+        super().__init__()
+
+        self.net = DVANet(
+            degradation_dim=512,
+            drb_mid_channels=64,
+            local_token_grid=2,
+            num_degradation_tokens=16,
+            dino_extract_ids=(5, 11, 17, 23),
+            device="cuda" if torch.cuda.is_available() else "cpu",
+        )
+        self.loss_fn = nn.L1Loss()
+
+    def forward(self, x):
+        return self.net(x)
+
+    def training_step(self, batch, batch_idx):
+        ([clean_name, de_id], degrad_patch, clean_patch) = batch
+        restored = self.net(degrad_patch)
+
+        loss = self.loss_fn(restored, clean_patch)
+        self.log("train_loss", loss)
+        return loss
+
+    def lr_scheduler_step(self, scheduler, metric):
+        scheduler.step(self.current_epoch)
+
+    def configure_optimizers(self):
+        optimizer = optim.AdamW(self.parameters(), lr=2e-4)
+        scheduler = LinearWarmupCosineAnnealingLR(
+            optimizer=optimizer,
+            warmup_epochs=15,
+            max_epochs=180
+        )
+        return [optimizer], [scheduler]
+
+
+def test_Denoise(net, dataset, sigma=15):
+    output_path = os.path.join(testopt.output_path, 'denoise', str(sigma))
+    os.makedirs(output_path, exist_ok=True)
+
+    dataset.set_sigma(sigma)
+    testloader = DataLoader(dataset, batch_size=1, pin_memory=True, shuffle=False, num_workers=0)
+
+    psnr = AverageMeter()
+    ssim = AverageMeter()
+
+    with torch.no_grad():
+        for ([clean_name], degrad_patch, clean_patch) in tqdm(testloader):
+            degrad_patch = degrad_patch.to(device)
+            clean_patch = clean_patch.to(device)
+
+            restored = net(degrad_patch)
+            temp_psnr, temp_ssim, N = compute_psnr_ssim(restored, clean_patch)
+
+            psnr.update(temp_psnr, N)
+            ssim.update(temp_ssim, N)
+            save_image_tensor(restored, os.path.join(output_path, clean_name[0] + '.png'))
+
+        print("Denoise sigma=%d: psnr: %.2f, ssim: %.4f" % (sigma, psnr.avg, ssim.avg))
+
+
+def test_Derain_Dehaze(net, dataset, task="derain"):
+    output_path = os.path.join(testopt.output_path, task)
+    os.makedirs(output_path, exist_ok=True)
+
+    dataset.set_dataset(task)
+    testloader = DataLoader(dataset, batch_size=1, pin_memory=True, shuffle=False, num_workers=0)
+
+    psnr = AverageMeter()
+    ssim = AverageMeter()
+
+    with torch.no_grad():
+        for ([degraded_name], degrad_patch, clean_patch) in tqdm(testloader):
+            degrad_patch = degrad_patch.to(device)
+            clean_patch = clean_patch.to(device)
+
+            restored = net(degrad_patch)
+
+            temp_psnr, temp_ssim, N = compute_psnr_ssim(restored, clean_patch)
+            psnr.update(temp_psnr, N)
+            ssim.update(temp_ssim, N)
+
+            save_image_tensor(restored, os.path.join(output_path, degraded_name[0] + '.png'))
+
+        print("PSNR: %.2f, SSIM: %.4f" % (psnr.avg, ssim.avg))
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cuda', type=int, default=0)
+    parser.add_argument(
+        '--mode',
+        type=int,
+        default=6,
+        help='0 for denoise, 1 for derain, 2 for dehaze, 3 for deblur, 4 for enhance, 5 for all-in-one (three tasks), 6 for all-in-one (five tasks)'
+    )
+
+    parser.add_argument('--gopro_path', type=str, default="data/test/deblur/", help='save path of test blurry images')
+    parser.add_argument('--enhance_path', type=str, default="data/test/enhance/", help='save path of test low-light images')
+    parser.add_argument('--denoise_path', type=str, default="data/test/denoise/", help='save path of test noisy images')
+    parser.add_argument('--derain_path', type=str, default="data/test/derain/", help='save path of test raining images')
+    parser.add_argument('--dehaze_path', type=str, default="data/test/dehaze/", help='save path of test hazy images')
+
+    parser.add_argument('--output_path', type=str, default="DVANet3D_results/", help='output save path')
+    parser.add_argument('--ckpt_name', type=str, default="epoch=99-step=867700.ckpt", help='checkpoint save path')
+
+    testopt = parser.parse_args()
+
+    np.random.seed(0)
+    torch.manual_seed(0)
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available, but this test script requires GPU.")
+
+    torch.cuda.set_device(testopt.cuda)
+    device = torch.device(f'cuda:{testopt.cuda}')
+
+    ckpt_path = testopt.ckpt_name
+
+    denoise_splits = ["bsd68/"]
+    derain_splits = ["Rain100L/"]
+    deblur_splits = ["gopro/"]
+    enhance_splits = ["lol/"]
+
+    denoise_tests = []
+
+    base_path = testopt.denoise_path
+    for i in denoise_splits:
+        testopt.denoise_path = os.path.join(base_path, i)
+        denoise_testset = DenoiseTestDataset(testopt)
+        denoise_tests.append(denoise_testset)
+    testopt.denoise_path = base_path
+
+    print("CKPT name : {}".format(ckpt_path))
+
+    net = DVANetModel.load_from_checkpoint(
+        checkpoint_path=ckpt_path,
+        map_location="cpu"
+    ).to(device)
+    net.eval()
+
+    if testopt.mode == 0:
+        for testset, name in zip(denoise_tests, denoise_splits):
+            print('Start {} testing Sigma=15...'.format(name))
+            test_Denoise(net, testset, sigma=15)
+
+            print('Start {} testing Sigma=25...'.format(name))
+            test_Denoise(net, testset, sigma=25)
+
+            print('Start {} testing Sigma=50...'.format(name))
+            test_Denoise(net, testset, sigma=50)
+
+    elif testopt.mode == 1:
+        print('Start testing rain streak removal...')
+        derain_base_path = testopt.derain_path
+        for name in derain_splits:
+            print('Start testing {} rain streak removal...'.format(name))
+            testopt.derain_path = os.path.join(derain_base_path, name)
+            derain_set = DerainDehazeDataset(testopt, addnoise=False, sigma=15)
+            test_Derain_Dehaze(net, derain_set, task="derain")
+        testopt.derain_path = derain_base_path
+
+    elif testopt.mode == 2:
+        print('Start testing SOTS...')
+        dehaze_base_path = testopt.dehaze_path
+        name = derain_splits[0]
+        testopt.dehaze_path = os.path.join(dehaze_base_path, name)
+        dehaze_set = DerainDehazeDataset(testopt, addnoise=False, sigma=15, task='dehaze')
+        test_Derain_Dehaze(net, dehaze_set, task="dehaze")
+        testopt.dehaze_path = dehaze_base_path
+
+    elif testopt.mode == 3:
+        print('Start testing GOPRO...')
+        deblur_base_path = testopt.gopro_path
+        name = deblur_splits[0]
+        testopt.gopro_path = os.path.join(deblur_base_path, name)
+        deblur_set = DerainDehazeDataset(testopt, addnoise=False, sigma=15, task='deblur')
+        test_Derain_Dehaze(net, deblur_set, task="deblur")
+        testopt.gopro_path = deblur_base_path
+
+    elif testopt.mode == 4:
+        print('Start testing LOL...')
+        enhance_base_path = testopt.enhance_path
+        name = enhance_splits[0]
+        testopt.enhance_path = os.path.join(enhance_base_path, name)
+        enhance_set = DerainDehazeDataset(testopt, addnoise=False, sigma=15, task='enhance')
+        test_Derain_Dehaze(net, enhance_set, task="enhance")
+        testopt.enhance_path = enhance_base_path
+
+    elif testopt.mode == 5:
+        for testset, name in zip(denoise_tests, denoise_splits):
+            print('Start {} testing Sigma=15...'.format(name))
+            test_Denoise(net, testset, sigma=15)
+
+            print('Start {} testing Sigma=25...'.format(name))
+            test_Denoise(net, testset, sigma=25)
+
+            print('Start {} testing Sigma=50...'.format(name))
+            test_Denoise(net, testset, sigma=50)
+
+        derain_base_path = testopt.derain_path
+        print(derain_splits)
+        for name in derain_splits:
+            print('Start testing {} rain streak removal...'.format(name))
+            testopt.derain_path = os.path.join(derain_base_path, name)
+            derain_set = DerainDehazeDataset(testopt, addnoise=False, sigma=15)
+            test_Derain_Dehaze(net, derain_set, task="derain")
+        testopt.derain_path = derain_base_path
+
+        print('Start testing SOTS...')
+        test_Derain_Dehaze(net, derain_set, task="dehaze")
+
+    elif testopt.mode == 6:
+        for testset, name in zip(denoise_tests, denoise_splits):
+            print('Start {} testing Sigma=15...'.format(name))
+            test_Denoise(net, testset, sigma=15)
+
+            print('Start {} testing Sigma=25...'.format(name))
+            test_Denoise(net, testset, sigma=25)
+
+            print('Start {} testing Sigma=50...'.format(name))
+            test_Denoise(net, testset, sigma=50)
+
+        derain_base_path = testopt.derain_path
+        print(derain_splits)
+        for name in derain_splits:
+            print('Start testing {} rain streak removal...'.format(name))
+            testopt.derain_path = os.path.join(derain_base_path, name)
+            derain_set = DerainDehazeDataset(testopt, addnoise=False, sigma=15)
+            test_Derain_Dehaze(net, derain_set, task="derain")
+        testopt.derain_path = derain_base_path
+
+        print('Start testing SOTS...')
+        test_Derain_Dehaze(net, derain_set, task="dehaze")
+
+        deblur_base_path = testopt.gopro_path
+        for name in deblur_splits:
+            print('Start testing GOPRO...')
+            testopt.gopro_path = os.path.join(deblur_base_path, name)
+            deblur_set = DerainDehazeDataset(testopt, addnoise=False, sigma=15, task='deblur')
+            test_Derain_Dehaze(net, deblur_set, task="deblur")
+        testopt.gopro_path = deblur_base_path
+
+        enhance_base_path = testopt.enhance_path
+        for name in enhance_splits:
+            print('Start testing LOL...')
+            testopt.enhance_path = os.path.join(enhance_base_path, name)
+            enhance_set = DerainDehazeDataset(testopt, addnoise=False, sigma=15, task='enhance')
+            test_Derain_Dehaze(net, enhance_set, task="enhance")
+        testopt.enhance_path = enhance_base_path
