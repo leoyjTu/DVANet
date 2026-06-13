@@ -249,25 +249,18 @@ python metrics.py
 
 ## ✨ Qualitative Results
 
-<details>
-<summary><strong>Click to view qualitative comparison results</strong></summary>
-<br>
-
-<details>
 <summary><strong>Visual comparison under the composite degradation.</strong></summary>
 <br>
 <p align="center">
-  <img src="figs/CDD.png" width="700">
+  <img src="figs/CDD.png" width="900">
 </p>
-</details>
-<details>
+
 <summary><strong>Visual comparison under the NightRain degradation.</strong></summary>
 <br>
 <p align="center">
-  <img src="figs/HQ-NightRain.png" width="700">
+  <img src="figs/HQ-NightRain.png" width="900">
 </p>
-</details>
-</details>
+
 
 
 ## 💖 Acknowledgment
