@@ -42,7 +42,7 @@ These cues are then used to guide the degradation-aware observation consistency 
 
 ## 🛠️ Environment Setup
 
-We recommend using Conda to create a clean environment.
+We recommend using conda to create a clean environment.
 
 ```bash
 conda create -n dvanet python=3.10 -y
@@ -71,13 +71,7 @@ This repository contains two experimental settings:
 
 ### 1. Dataset Structure for `Multi_Noise_Denoising`
 
-For the denoising task, the training images should be placed under:
-
-```text
-data/Train/Denoise/
-```
-
-The expected training data structure is:
+For the denoising task, the expected training data structure is:
 
 ```text
 data/
@@ -106,13 +100,7 @@ During evaluation, noisy images are generated on-the-fly from clean test images 
 
 ### 2. Dataset Structure for `Single_Composite_Degradation`
 
-For single and composite degradation restoration, the datasets should be placed under:
-
-```text
-datasets/
-```
-
-The expected dataset structure is:
+For single and composite degradation restoration, the expected dataset structure is:
 
 ```text
 datasets/
