@@ -63,7 +63,7 @@ pip install -r requirements.txt
 
 ## Pre-trained Weights (Baidu Netdisk)
 
-For the DINOv3 pre-trained weight, please download it from [Baidu Netdisk](https://pan.baidu.com/s/1bqI9sWDIUGw43_mqF4JstA?pwd=4szd) (extraction code: `4szd`) and place it under `dinov3/weights/`.
+For the DINOv3 pre-trained weight, please download it from [Baidu Netdisk](https://pan.baidu.com/s/1bqI9sWDIUGw43_mqF4JstA) (extraction code: `4szd`) and place it under `dinov3/weights/`.
 
 The expected file structure is:
 
