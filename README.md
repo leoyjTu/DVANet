@@ -271,10 +271,10 @@ This project is based on [Restormer](https://github.com/swz30/Restormer), [BioIR
 If this code contributes to your research, please cite our work:
 
 ```bibtex
-@article{XXX,
+@article{tu2026dvanet,
   title={DVANet: Degradation-aware Visual-prior Alignment Network for Image Restoration},
-  author={XXX},
-  journal={XX},
+  author={Tu, Yanjie and Yan, Qingsen and Niu, Axi and Hu, Tao and Zhang, Haokui and Zhou, Jiantao},
+  journal={arXiv preprint arXiv:2606.19097},
   year={2026}
 }
 ```
