@@ -16,12 +16,10 @@
   <sup>*</sup>Corresponding Author
 </p>
 
-<!--
+
 <p align="center">
-  <a href="https://leoyjtu.github.io/tpgdiff-project/">🌐 Project Page</a> |
-  <a href="https://arxiv.org/abs/2601.20306">📜 Arxiv</a>
+  <a href='https://arxiv.org/abs/2606.19097'><img src='https://img.shields.io/badge/Paper-arXiv-red'></a>
 </p>
--->
 
 ---
 
