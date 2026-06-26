@@ -71,6 +71,8 @@ dinov3/
     └── dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth
 ```
 
+The pre-trained model can be downloaded from [Baidu Netdisk](https://pan.baidu.com/s/1hNNFVSyKQCBVMf3C_kePvw?pwd=v3qg) using the extraction code `v3qg`. Please place the downloaded model under the `pretrain_model/` directory.
+
 ## ⬇️ Dataset Preparation
 
 This repository contains two experimental settings:
