@@ -25,7 +25,8 @@
 
 ## 🔥 Update Log
 
-* 📢 This repository is released.
+* 📢 Code released.
+* 📢 Pretrained model released.
 
 ## 📖 Method Overview
 
